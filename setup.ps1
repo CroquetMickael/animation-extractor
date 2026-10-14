@@ -81,5 +81,6 @@ $Smplx = Join-Path $Ck "body_models\smplx\SMPLX_NEUTRAL.npz"
 if (-not (Test-Path $Smplx)) {
     Write-Host "`nGVHMR : il reste a deposer SMPLX_NEUTRAL.npz (compte gratuit sur https://smpl-x.is.tue.mpg.de) dans :" -ForegroundColor Cyan
     Write-Host "  $(Split-Path $Smplx)" -ForegroundColor Cyan
+    Write-Host "Miroir non officiel (meme licence non commerciale) : https://huggingface.co/camenduru/SMPLer-X/blob/main/SMPLX_NEUTRAL.npz" -ForegroundColor Cyan
 }
 Write-Host "`nInstallation terminee. Lancer : animx.bat" -ForegroundColor Green
