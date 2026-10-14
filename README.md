@@ -30,6 +30,8 @@ Tout s'installe dans le dossier du projet : Python 3.10 isolé, dépendances, Co
 
 **GVHMR a besoin de `SMPLX_NEUTRAL.npz`.** Ce fichier est sous licence non commerciale, donc il n'est pas fourni. Crée un compte gratuit sur <https://smpl-x.is.tue.mpg.de>, télécharge le modèle, puis dépose-le dans `third_party/GVHMR/inputs/checkpoints/body_models/smplx/`. MediaPipe fonctionne sans ce fichier.
 
+Une copie est aussi disponible sur Hugging Face : <https://huggingface.co/camenduru/SMPLer-X/blob/main/SMPLX_NEUTRAL.npz>. C'est un miroir non officiel, et la licence SMPL-X (usage non commercial) s'applique quelle que soit la source.
+
 ## Utilisation
 
 ```powershell
