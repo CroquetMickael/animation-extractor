@@ -33,7 +33,25 @@ export default function MovesetTab() {
   const [error, setError] = useState(null);
   const [resourcesDir, setResourcesDir] = useState(readResourcesDir);
   const [installed, setInstalled] = useState(null);
+  const [previewClips, setPreviewClips] = useState([]);
+  const preview = useStore((s) => s.preview);
+  const previewMoveset = useStore((s) => s.previewMoveset);
+  const motionLoading = useStore((s) => s.motionLoading);
   const current = movesets.find((m) => m.id === currentId) || movesets[0];
+  const slotsKey = JSON.stringify(current?.slots || {});
+
+  useEffect(() => {
+    if (!current) {
+      setPreviewClips([]);
+      return;
+    }
+    api.movesetPreviewClips(projectId, current.id).then((data) => setPreviewClips(data.clips)).catch(() => setPreviewClips([]));
+  }, [projectId, current?.id, slotsKey]);
+
+  // Leaving the tab puts the edited clip back in the viewer.
+  useEffect(() => () => {
+    if (useStore.getState().preview) useStore.getState().reloadMotion();
+  }, []);
 
   useEffect(() => {
     api
@@ -185,6 +203,28 @@ export default function MovesetTab() {
             Vitesses par défaut = celles de Rockstar (marche {defaults.walk}, course {defaults.run}, sprint {defaults.sprint} m/s) : ton ped garde la même vitesse de jeu qu'avec le style normal.
           </p>
 
+          {previewClips.length > 0 && (
+            <div className="stack">
+              <span className="group-title">Aperçu en jeu</span>
+              <p className="muted small">Joue dans la vue 3D ce que GTA recevra, le ped suivant sa trajectoire. « Parcours complet » enchaîne tout le style : arrêt, démarrage, marche, course, virages, sprint, arrêt.</p>
+              <div className="row wrap">
+                {previewClips.map((name) => (
+                  <button
+                    key={name}
+                    className={preview?.moveset === current.id && preview?.clip === name ? 'primary small' : 'secondary small'}
+                    onClick={() => previewMoveset(current.id, name)}
+                    disabled={motionLoading}
+                  >
+                    {name === 'parcours' ? '▶ Parcours complet' : name}
+                  </button>
+                ))}
+              </div>
+              {preview?.moveset === current.id && (
+                <button className="secondary small" onClick={() => useStore.getState().reloadMotion()}>Revenir au clip édité</button>
+              )}
+            </div>
+          )}
+
           <div className="row">
             <button className="primary" onClick={exportMoveset} disabled={!!job || !Object.values(current.slots || {}).some(Boolean)}>
               {job ? 'Génération…' : 'Générer la ressource'}
@@ -210,14 +250,23 @@ export default function MovesetTab() {
                       <td>{s.duration.toFixed(2)} s</td>
                       <td>{s.slot === 'idle' ? 'boucle' : s.aligned ? `${s.strides} foulée${s.strides > 1 ? 's' : ''}` : 'boucle par fondu'}</td>
                       <td>{s.speed ? `${s.speed.toFixed(2)} m/s` : ''}</td>
+                      <td title={(s.turns || []).join(', ')}>{s.turns?.length ? `+ ${s.turns.length} virages` : ''}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              <p className="muted small" title={(result.transitions || []).join(', ')}>
+                {result.transitions?.length
+                  ? `+ ${result.transitions.length} transitions (démarrages, arrêts, changements d'allure)`
+                  : "Pas de transition : il faut l'arrêt avec la marche ou la course pour les démarrages et arrêts, et la marche avec la course pour les changements d'allure."}
+              </p>
               {result.slots.some((s) => s.slot !== 'idle' && !s.aligned) && (
                 <p className="warn small">Moins de deux foulées complètes détectées sur certains clips : la boucle est faite par fondu, des pas peuvent glisser. Un clip plus long de course régulière donnera une boucle propre.</p>
               )}
               <p className="muted small mono">{result.folder}</p>
+              <a className="secondary button" href={api.movesetDownloadUrl(projectId, current.id)} download>
+                Télécharger {result.clipset}.zip
+              </a>
               <label className="field">
                 Dossier resources de ton serveur
                 <input className="text mono" placeholder="…\server-data\resources\[anims]" value={resourcesDir} onChange={(e) => setResourcesDir(e.target.value)} />

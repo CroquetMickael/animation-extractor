@@ -1,4 +1,4 @@
-import { useStore } from '../../store.js';
+import { ROOT_OFFSET, useStore } from '../../store.js';
 import { Slider } from '../fields.jsx';
 
 const GROUPS = [
@@ -8,6 +8,12 @@ const GROUPS = [
   ['Jambe gauche', ['SKEL_L_Thigh', 'SKEL_L_Calf', 'SKEL_L_Foot', 'SKEL_L_Toe0']],
   ['Jambe droite', ['SKEL_R_Thigh', 'SKEL_R_Calf', 'SKEL_R_Foot', 'SKEL_R_Toe0']],
 ];
+
+const keyLabel = (key) => {
+  if (!key.t) return label(key.bone);
+  const [x, y, z] = key.t.map((v) => Math.round(v * 100));
+  return `${key.bone === ROOT_OFFSET ? 'Corps' : label(key.bone)} · déplacé ${x} / ${y} / ${z} cm`;
+};
 
 const label = (name) => name.replace('SKEL_', '').replace('_L_', ' G · ').replace('_R_', ' D · ').replace(/^L_/, 'G · ').replace(/^R_/, 'D · ');
 
@@ -33,7 +39,7 @@ export default function BonesTab() {
       </div>
       <p className="muted small">
         {editMode === 'key'
-          ? "Tourne un os à l'image courante : la correction s'estompe sur les images voisines."
+          ? "Tourne ou déplace (« Déplacer » dans la vue 3D) une articulation à l'image courante : la correction s'estompe sur les images voisines."
           : 'Décalage permanent d’un os, appliqué à toutes les images de tous les clips (erreur systématique).'}
       </p>
       {editMode === 'key' && (
@@ -68,8 +74,8 @@ export default function BonesTab() {
         {keys.length === 0 && <p className="muted small">Aucune.</p>}
         {keys.map((key, index) => (
           <div key={index} className="list-row">
-            <button className="link" onClick={() => { setFrame(key.frame); selectBone(key.bone); }}>
-              {label(key.bone)} · img {key.frame} · {key.radius < 0 ? 'tout' : `±${key.radius}`}
+            <button className="link" onClick={() => { setFrame(key.frame); selectBone(key.bone === ROOT_OFFSET ? 'SKEL_ROOT' : key.bone); }}>
+              {keyLabel(key)} · img {key.frame} · {key.radius < 0 ? 'tout' : `±${key.radius}`}
             </button>
             <button className="icon" onClick={() => removeKey(index)} title="Supprimer">✕</button>
           </div>

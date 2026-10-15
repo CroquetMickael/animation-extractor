@@ -16,19 +16,25 @@ export default function Viewport() {
   const motionError = useStore((s) => s.motionError);
   const editMode = useStore((s) => s.editMode);
   const setEditMode = useStore((s) => s.setEditMode);
+  const transformMode = useStore((s) => s.transformMode);
+  const setTransformMode = useStore((s) => s.setTransformMode);
   const showVideo = useStore((s) => s.showVideo);
   const setShowVideo = useStore((s) => s.setShowVideo);
 
   useEffect(() => {
     const instance = new PedViewer(container.current);
     instance.onSelect = (bone) => {
-      // Whole-video preview has no clip to hold corrections.
-      if (useStore.getState().clipId === FULL) return;
+      // Whole-video and style previews have no clip to hold corrections.
+      if (useStore.getState().clipId === FULL || useStore.getState().preview) return;
       useStore.getState().selectBone(bone);
     };
     instance.onCommit = (bone, offset) => {
       useStore.getState().setPlaying(false);
       useStore.getState().addBoneOffset(bone, offset);
+    };
+    instance.onTranslate = (bone, offset) => {
+      useStore.getState().setPlaying(false);
+      useStore.getState().addMoveKey(bone, offset);
     };
     viewer.current = instance;
     return () => instance.dispose();
@@ -63,6 +69,10 @@ export default function Viewport() {
   useEffect(() => {
     viewer.current?.setMarkersVisible(showMarkers);
   }, [showMarkers]);
+
+  useEffect(() => {
+    viewer.current?.setTransformMode(transformMode);
+  }, [transformMode]);
 
   return (
     <div className="viewport">
@@ -106,16 +116,35 @@ export default function Viewport() {
 
       {selectedBone && (
         <div className="viewport-hint">
-          <strong>{selectedBone}</strong>
-          <span className="muted">tourne avec les anneaux, la retouche s'applique à :</span>
           <div className="hint-switch">
-            <button className={editMode === 'key' ? 'active' : ''} onClick={() => setEditMode('key')} title="La correction s'estompe sur les images voisines (portée réglable dans l'onglet Os)">
-              ce clip
+            <button className={transformMode === 'rotate' ? 'active' : ''} onClick={() => setTransformMode('rotate')} title="Tourner l'articulation sélectionnée">
+              Tourner
             </button>
-            <button className={editMode === 'calibration' ? 'active' : ''} onClick={() => setEditMode('calibration')} title="Décalage permanent appliqué à toutes les images de tous les clips">
-              tous les clips
+            <button className={transformMode === 'translate' ? 'active' : ''} onClick={() => setTransformMode('translate')} title="Déplacer l'articulation : le bras ou la jambe suit (IK), le bassin emmène tout le corps">
+              Déplacer
             </button>
           </div>
+          <strong>{selectedBone}</strong>
+          {transformMode === 'rotate' ? (
+            <>
+              <span className="muted">tourne avec les anneaux, la retouche s'applique à :</span>
+              <div className="hint-switch">
+                <button className={editMode === 'key' ? 'active' : ''} onClick={() => setEditMode('key')} title="La correction s'estompe sur les images voisines (portée réglable dans l'onglet Os)">
+                  ce clip
+                </button>
+                <button className={editMode === 'calibration' ? 'active' : ''} onClick={() => setEditMode('calibration')} title="Décalage permanent appliqué à toutes les images de tous les clips">
+                  tous les clips
+                </button>
+              </div>
+            </>
+          ) : (
+            <span className="muted">
+              {selectedBone === 'SKEL_ROOT' || selectedBone === 'SKEL_Pelvis'
+                ? 'tire les flèches : tout le corps suit'
+                : 'tire les flèches : le membre suit en IK'}
+              {' '}· sur ce clip, portée réglable dans l'onglet Os
+            </span>
+          )}
           <span className="muted">· Échap pour quitter</span>
         </div>
       )}

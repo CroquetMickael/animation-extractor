@@ -98,6 +98,7 @@ export default function ClipTab() {
           <Toggle label="Lire à l'envers" checked={clip.reverse} onChange={(reverse) => store.updateClip(clip.id, { reverse })} hint="L'animation est jouée à rebours : une marche avant devient une marche arrière (le mover recule aussi)" />
           <Toggle label="Miroir gauche ↔ droite" checked={clip.mirror} onChange={(mirror) => store.updateClip(clip.id, { mirror })} hint="Échange le côté gauche et le côté droit : une esquive à droite devient une esquive à gauche" />
           <Toggle label="Pieds verrouillés" checked={clip.foot_lock} onChange={(foot_lock) => store.updateClip(clip.id, { foot_lock })} hint="Empêche les pieds de glisser quand ils sont au sol" />
+          <Toggle label="Pieds posés au sol" checked={!!clip.plant_feet} onChange={(plant_feet) => store.updateClip(clip.id, { plant_feet })} hint="Un pied presque immobile qui flotte à quelques centimètres est descendu jusqu'au sol (la jambe se plie) : utile pour un idle ou une posture" />
           <Toggle label="Bloquer l'orientation" checked={clip.lock_heading} onChange={(lock_heading) => store.updateClip(clip.id, { lock_heading })} hint="Annule les rotations du corps autour de l'axe vertical" />
           {project.settings.engine === 'gvhmr' && (
             <label className="field">

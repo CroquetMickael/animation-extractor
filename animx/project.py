@@ -21,6 +21,7 @@ CLIP_DEFAULTS = {
     "mirror": False,
     "lock_heading": False,
     "foot_lock": True,
+    "plant_feet": False,
     "speed": 1.0,
     "hand_left": "relaxed",
     "hand_right": "relaxed",

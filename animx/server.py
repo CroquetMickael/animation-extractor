@@ -1,13 +1,15 @@
 """Local editor backend: `python -m animx ui` serves the React app and this API on 127.0.0.1."""
 import base64
+import io
 import json
 import shutil
 import tempfile
+import zipfile
 from pathlib import Path
 
 import numpy as np
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import jobs, moveset, pipeline, project as projects, segment, skeleton, system
@@ -213,6 +215,43 @@ def suggest_moveset(project_id: str):
         raise HTTPException(409, str(ex))
 
 
+def _moveset_or_404(p, moveset_id):
+    target = next((m for m in p.data.get("movesets", []) if m.get("id") == moveset_id), None)
+    if target is None:
+        raise HTTPException(404, "moveset not found")
+    return target
+
+
+@app.get("/api/projects/{project_id}/movesets/{moveset_id}/preview-clips")
+def moveset_preview_clips(project_id: str, moveset_id: str):
+    p = _project_or_404(project_id)
+    return {"clips": moveset.preview_names(p, _moveset_or_404(p, moveset_id))}
+
+
+@app.get("/api/projects/{project_id}/movesets/{moveset_id}/preview")
+def moveset_preview(project_id: str, moveset_id: str, clip: str):
+    """Same payload as /motion, for a style clip as the game will play it (turns included)."""
+    p = _project_or_404(project_id)
+    target = _moveset_or_404(p, moveset_id)
+    try:
+        fps, local_r, root_t, mover_t, mover_r = moveset.preview(p, target, clip)
+    except ValueError as ex:
+        raise HTTPException(404, str(ex))
+    except FileNotFoundError as ex:
+        raise HTTPException(409, str(ex))
+    skel = skeleton.load(p.settings["ped"])
+    return {
+        "fps": fps,
+        "frames": int(local_r.shape[0]),
+        "bones": skel.names,
+        "rotations": _b64(local_r),
+        "root": _b64(root_t),
+        "mover": None if mover_t is None else {"translation": _b64(mover_t), "rotation": _b64(mover_r)},
+        "travel": None,
+        "camera": None,
+    }
+
+
 @app.post("/api/projects/{project_id}/movesets/{moveset_id}/export")
 def export_moveset(project_id: str, moveset_id: str):
     p = _project_or_404(project_id)
@@ -226,18 +265,24 @@ def export_moveset(project_id: str, moveset_id: str):
     return jobs.start("moveset", project_id, work)
 
 
-@app.post("/api/projects/{project_id}/movesets/{moveset_id}/install")
-def install_moveset(project_id: str, moveset_id: str, body: dict):
-    """Copy the generated resource folder into a server's resources directory."""
+def _moveset_folder(project_id, moveset_id):
+    """The generated resource folder of a moveset, 404 until it has been generated."""
     p = _project_or_404(project_id)
     target = next((m for m in p.data.get("movesets", []) if m.get("id") == moveset_id), None)
     if target is None:
         raise HTTPException(404, "moveset not found")
     name = projects.slugify(target.get("name") or "gtaw_moveset", "gtaw_moveset")
     source = p.folder / "out" / "movesets" / name
-    destination_root = Path(body.get("resources_dir", ""))
     if not source.exists():
         raise HTTPException(404, "not exported yet")
+    return name, source
+
+
+@app.post("/api/projects/{project_id}/movesets/{moveset_id}/install")
+def install_moveset(project_id: str, moveset_id: str, body: dict):
+    """Copy the generated resource folder into a server's resources directory."""
+    name, source = _moveset_folder(project_id, moveset_id)
+    destination_root = Path(body.get("resources_dir", ""))
     if not destination_root.is_dir():
         raise HTTPException(400, "resources folder does not exist")
     destination = destination_root / name
@@ -245,6 +290,19 @@ def install_moveset(project_id: str, moveset_id: str, body: dict):
         shutil.rmtree(destination)
     shutil.copytree(source, destination)
     return {"ok": True, "path": str(destination)}
+
+
+@app.get("/api/projects/{project_id}/movesets/{moveset_id}/download")
+def download_moveset(project_id: str, moveset_id: str):
+    """The generated resource as a zip holding one folder, ready to drop into resources/."""
+    name, source = _moveset_folder(project_id, moveset_id)
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for path in sorted(source.rglob("*")):
+            if path.is_file():
+                archive.write(path, f"{name}/{path.relative_to(source).as_posix()}")
+    return Response(buffer.getvalue(), media_type="application/zip",
+                    headers={"Content-Disposition": f'attachment; filename="{name}.zip"'})
 
 
 @app.get("/api/projects/{project_id}/cut-candidates")

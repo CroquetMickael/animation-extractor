@@ -144,3 +144,36 @@ def _runs(mask):
     if start is not None:
         runs.append((start, len(mask)))
     return runs
+
+
+PLANT_MAX_HEIGHT = 0.08
+PLANT_SPEED_LIMIT = 0.35
+
+
+def plant_feet(skel, local_r, root_t, fps):
+    """Put a nearly still foot that hovers a few centimetres up down onto the ground (two-bone IK, the
+    foot keeps its orientation). The planted root only seats the lowest sole: in a stance the other foot
+    could float 3-4 cm for the whole clip, which hand corrections at one frame could not fix."""
+    soles = ground.sole_points(skel, local_r, root_t)
+    lowest = soles[..., 2].min(axis=2) - ground.GROUND_Z
+    centre = soles.mean(axis=2)
+    velocity = np.zeros_like(centre)
+    velocity[1:] = (centre[1:] - centre[:-1]) * fps
+    velocity[0] = velocity[1] if len(velocity) > 1 else 0.0
+    speed = np.linalg.norm(velocity[..., :2], axis=-1)
+    contact = ground._debounce((lowest < PLANT_MAX_HEIGHT) & (speed < PLANT_SPEED_LIMIT), 3)
+
+    local_t = np.broadcast_to(skel.bind_t, local_r.shape[:-1] + (3,)).copy()
+    local_t[:, skel.index("SKEL_ROOT")] = root_t
+    out = local_r.copy()
+    for s, side in enumerate(("L", "R")):
+        weight = gaussian_filter1d(contact[:, s].astype(np.float64), 1.5, mode="nearest") if len(contact) > 2 else contact[:, s] * 1.0
+        active = (weight > 1e-3) & (lowest[:, s] > 1e-4)
+        if not active.any():
+            continue
+        thigh, calf, foot = (skel.index(f"SKEL_{side}_{b}") for b in ("Thigh", "Calf", "Foot"))
+        world_r, world_p = skel.fk(out, local_t)
+        goal = world_p[:, foot].copy()
+        goal[:, 2] -= np.clip(lowest[:, s], 0.0, None) * weight
+        two_bone_ik(skel, out, world_r, world_p, thigh, calf, foot, goal, active)
+    return out

@@ -185,7 +185,10 @@ def clip_motion(project, clip, apply_edits=True):
 
     # Last word on height: every step above (IK, edits, loop blend) moves the feet a little.
     root_t = regrounded(local_r, root_t, tracked_z, jump_z)
+    if clip.get("plant_feet"):
+        local_r = cleanup.plant_feet(skel, local_r, root_t, motion.fps)
     root_t = edits.apply_root_keys(root_t, clip_keys)
+    local_r = edits.apply_move_keys(skel, local_r, root_t, clip_keys)
     if camera is not None:
         camera = {k: np.stack([cleanup.resample_scalar(v[:, c], speed) for c in range(3)], axis=1) for k, v in camera.items()}
         camera["fov"] = motion.camera["fov"]

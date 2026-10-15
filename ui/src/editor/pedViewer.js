@@ -18,6 +18,8 @@ export class PedViewer {
     this.onSelect = null;
     this.onCommit = null;
     this.dragStart = null;
+    this.transformMode = 'rotate';
+    this.onTranslate = null;
     this.followVideoCamera = false;
     this.followPed = true;
 
@@ -233,6 +235,15 @@ export class PedViewer {
     else this.gizmo.detach();
   }
 
+  // 'rotate' turns the selected joint; 'translate' drags it with world-aligned arrows (the pipeline
+  // solves the limb by IK, see animx/edits.apply_move_keys).
+  setTransformMode(mode) {
+    this.transformMode = mode;
+    this.gizmo.setMode(mode);
+    this.gizmo.setSpace(mode === 'translate' ? 'world' : 'local');
+    this.select(this.selected);
+  }
+
   onPointerDown(event) {
     if (this.gizmo.dragging || event.button !== 0) return;
     const rect = this.renderer.domElement.getBoundingClientRect();
@@ -247,12 +258,22 @@ export class PedViewer {
     const bone = this.gizmo.object;
     if (!bone) return;
     if (dragging) {
-      this.dragStart = bone.quaternion.clone();
+      this.dragStart = { quaternion: bone.quaternion.clone(), world: bone.getWorldPosition(new THREE.Vector3()) };
       return;
     }
-    const before = this.dragStart;
+    const start = this.dragStart;
     this.dragStart = null;
-    if (!before) return;
+    if (!start) return;
+    if (this.transformMode === 'translate') {
+      // The move key is stored in entity space: the space SKEL_ROOT's position lives in (the root track).
+      const entity = this.bones.get('SKEL_ROOT')?.parent || this.ped;
+      const after = entity.worldToLocal(bone.getWorldPosition(new THREE.Vector3()));
+      const delta = after.sub(entity.worldToLocal(start.world.clone()));
+      if (delta.lengthSq() < 1e-8) return;
+      this.onTranslate?.(bone.name, [delta.x, delta.y, delta.z]);
+      return;
+    }
+    const before = start.quaternion;
     const offset = before.clone().invert().multiply(bone.quaternion);
     if (Math.abs(offset.w) > 0.99999) return;
     this.onCommit?.(bone.name, [offset.x, offset.y, offset.z, offset.w]);

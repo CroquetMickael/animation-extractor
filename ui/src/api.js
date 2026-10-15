@@ -43,10 +43,13 @@ export const api = {
   cutCandidates: (id) => request(`/projects/${id}/cut-candidates`),
   suggestMoveset: (id) => request(`/projects/${id}/moveset/suggest`),
   exportMoveset: (id, movesetId) => request(`/projects/${id}/movesets/${movesetId}/export`, { method: 'POST' }),
+  movesetPreviewClips: (id, movesetId) => request(`/projects/${id}/movesets/${movesetId}/preview-clips`),
+  movesetPreview: (id, movesetId, clip) => request(`/projects/${id}/movesets/${movesetId}/preview?clip=${encodeURIComponent(clip)}`),
   installMoveset: (id, movesetId, resourcesDir) => request(`/projects/${id}/movesets/${movesetId}/install`, json('POST', { resources_dir: resourcesDir })),
   install: (id, streamDir) => request(`/projects/${id}/install`, json('POST', { stream_dir: streamDir })),
   videoUrl: (id) => `/api/projects/${id}/video`,
   downloadUrl: (id) => `/api/projects/${id}/download`,
+  movesetDownloadUrl: (id, movesetId) => `/api/projects/${id}/movesets/${movesetId}/download`,
 };
 
 export function decodeFloats(base64) {

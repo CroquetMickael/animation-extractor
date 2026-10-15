@@ -2,8 +2,30 @@ import { create } from 'zustand';
 import { api, decodeFloats } from './api.js';
 
 export const FULL = '__full__';
+export const ROOT_OFFSET = '__root_offset__';
 let motionToken = 0;
 const HISTORY_LIMIT = 100;
+
+function decodeMotion(data) {
+  return {
+    fps: data.fps,
+    frames: data.frames,
+    bones: data.bones,
+    rotations: decodeFloats(data.rotations),
+    root: decodeFloats(data.root),
+    travel: data.travel,
+    mover: data.mover && {
+      translation: decodeFloats(data.mover.translation),
+      rotation: decodeFloats(data.mover.rotation),
+    },
+    camera: data.camera && {
+      offset: decodeFloats(data.camera.offset),
+      forward: decodeFloats(data.camera.forward),
+      up: decodeFloats(data.camera.up),
+      fov: data.camera.fov,
+    },
+  };
+}
 
 export const useStore = create((set, get) => ({
   system: null,
@@ -16,11 +38,13 @@ export const useStore = create((set, get) => ({
   motion: null,
   motionLoading: false,
   motionError: null,
+  preview: null, // { moveset, clip } while the viewer plays a style clip instead of a project clip
   frame: 0,
   playing: false,
   selectedBone: null,
   edits: { calibration: {}, keys: {} },
   editMode: 'key',
+  transformMode: 'rotate',
   keyRadius: 12,
   showOverlay: true,
   showVideo: true,
@@ -195,6 +219,7 @@ export const useStore = create((set, get) => ({
 
   reloadMotion: async () => {
     const { projectId, clipId, project } = get();
+    set({ preview: null });
     if (!projectId || !clipId || !project) return;
     const hasCapture = project.captures?.[project.settings.engine];
     if (!hasCapture) {
@@ -206,25 +231,24 @@ export const useStore = create((set, get) => ({
     try {
       const data = await api.motion(projectId, clipId);
       if (token !== motionToken) return;
-      const motion = {
-        fps: data.fps,
-        frames: data.frames,
-        bones: data.bones,
-        rotations: decodeFloats(data.rotations),
-        root: decodeFloats(data.root),
-        travel: data.travel,
-        mover: data.mover && {
-          translation: decodeFloats(data.mover.translation),
-          rotation: decodeFloats(data.mover.rotation),
-        },
-        camera: data.camera && {
-          offset: decodeFloats(data.camera.offset),
-          forward: decodeFloats(data.camera.forward),
-          up: decodeFloats(data.camera.up),
-          fov: data.camera.fov,
-        },
-      };
+      const motion = decodeMotion(data);
       set((state) => ({ motion, motionLoading: false, frame: Math.min(state.frame, motion.frames - 1) }));
+    } catch (error) {
+      if (token !== motionToken) return;
+      set({ motion: null, motionLoading: false, motionError: error.message });
+    }
+  },
+
+  // Plays one of a style's clips (straight loop or generated turn) the way the game will.
+  previewMoveset: async (movesetId, clip) => {
+    const { projectId } = get();
+    if (!projectId) return;
+    const token = ++motionToken;
+    set({ preview: { moveset: movesetId, clip }, motionLoading: true, motionError: null, selectedBone: null });
+    try {
+      const data = await api.movesetPreview(projectId, movesetId, clip);
+      if (token !== motionToken) return;
+      set({ motion: decodeMotion(data), motionLoading: false, frame: 0, playing: true });
     } catch (error) {
       if (token !== motionToken) return;
       set({ motion: null, motionLoading: false, motionError: error.message });
@@ -240,6 +264,7 @@ export const useStore = create((set, get) => ({
   setPlaying: (playing) => set({ playing }),
   selectBone: (selectedBone) => set({ selectedBone }),
   setEditMode: (editMode) => set({ editMode }),
+  setTransformMode: (transformMode) => set({ transformMode }),
   setKeyRadius: (keyRadius) => set({ keyRadius }),
   toggleOverlay: () => set((s) => ({ showOverlay: !s.showOverlay })),
   setShowVideo: (showVideo) => set({ showVideo }),
@@ -262,6 +287,16 @@ export const useStore = create((set, get) => ({
     } else {
       next.keys[clipId] = [...(next.keys[clipId] || []), { bone, frame, q: offset, radius: keyRadius }];
     }
+    await get().saveEdits(next);
+  },
+
+  // Dragged joint, as a clip key that fades like the rotation keys. The pelvis carries the whole body
+  // (edits.apply_root_keys); any other joint is reached by IK (edits.apply_move_keys).
+  addMoveKey: async (bone, offset) => {
+    const { edits, clipId, frame, keyRadius } = get();
+    const next = structuredClone(edits);
+    const target = bone === 'SKEL_ROOT' || bone === 'SKEL_Pelvis' ? ROOT_OFFSET : bone;
+    next.keys[clipId] = [...(next.keys[clipId] || []), { bone: target, frame, t: offset, radius: keyRadius }];
     await get().saveEdits(next);
   },
 
